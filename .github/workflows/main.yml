@@ -40,4 +40,4 @@ jobs:
           if [ -f module/requirements_test.txt ]; then pip install -r module/requirements_test.txt; fi
       - name: Test with unittest
         run: |
-          python -m unittest module/test/*.py
+          python -m unittest balticlsc/test/*.py
