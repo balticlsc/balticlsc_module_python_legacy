@@ -38,6 +38,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f balticlsc/requirements_test.txt ]; then pip install -r balticlsc/requirements_test.txt; fi
-      - name: Test with unittest
+      - name: Test scheme
         run: |
-          python -m unittest balticlsc/test/*.py
+          python -m unittest balticlsc/scheme/*_test.py

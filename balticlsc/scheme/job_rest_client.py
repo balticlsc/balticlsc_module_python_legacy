@@ -1,11 +1,12 @@
+from typing import List
+
 import requests
 import json
 
-from .logger import logger
-from .status import JobStatus, ComputationStatus
-from .token import AckToken, OutputToken
-from typing import List
-str_list = List[str]
+from balticlsc.scheme.logger import logger
+from balticlsc.scheme.status import JobStatus, ComputationStatus
+from balticlsc.scheme.token import AckToken, OutputToken, Token
+from balticlsc.scheme.utils import snake_to_camel
 
 
 class JobRestClient:
@@ -15,43 +16,35 @@ class JobRestClient:
         self._sender_uid = sender_uid
         self._module_status = JobStatus()
 
-    def send_output_token(self, msg_uid: str, values: dict, output_pin_name, is_final=True):
+    def send_output_token(self, base_msg_uid: str, values: dict, output_pin_name, is_final=True):
         msg = OutputToken(
-            PinName=output_pin_name,
-            SenderUid=self._sender_uid,
-            Values=json.dumps(values),
-            MsgUid=msg_uid,
-            IsFinal=is_final)
+            pin_name=output_pin_name,
+            sender_uid=self._sender_uid,
+            values=json.dumps({snake_to_camel(key): value for key, value in values.items()}),
+            base_msg_uid=base_msg_uid,
+            is_final=is_final)
         JobRestClient.__send_msg_to_batch_manager(msg, self._url_token)
 
-    def send_ack_token(self, msg_uid: str, is_final=False, is_failed=False, note=''):
+    def send_ack_token(self, msg_uids: List[str], is_final=False, is_failed=False, note=''):
         msg = AckToken(
-            SenderUid=self._sender_uid,
-            MsgUid=msg_uid,
-            IsFinal=is_final,
-            IsFailed=is_failed,
-            Note=note)
+            sender_uid=self._sender_uid,
+            msg_uids=msg_uids,
+            is_final=is_final,
+            is_failed=is_failed,
+            note=note)
         JobRestClient.__send_msg_to_batch_manager(msg, self._url_ack)
 
-    def get_status(self) -> JobStatus:
+    def get_job_status(self) -> JobStatus:
         return self._module_status
 
     def get_computation_status(self) -> ComputationStatus:
         return self._module_status.get_computation_status()
 
-    def update_status(self, msg_uid: str, job_progress: float, status: ComputationStatus = ComputationStatus.Working):
+    def update_status(self, status: ComputationStatus = ComputationStatus.Working, job_progress: float = 0.0):
         self._module_status.update(status, job_progress)
 
-        if status != ComputationStatus.Failed:
-            self.send_ack_token(
-                msg_uid=msg_uid,
-                is_final=False,
-                is_failed=False,
-                note=''
-            )
-
     @staticmethod
-    def __send_msg_to_batch_manager(msg, url):
-        msg_json = msg.to_json()
-        logger.info('sending message to batch manager: ' + msg_json)
-        # TODO uncomment this requests.post(url, data=msg.to_json(), headers={'content-type': 'application/json'})
+    def __send_msg_to_batch_manager(token: Token, url):
+        token_json = token.to_json()
+        logger.info(f'sending message to batch manager, url={url}, message={token_json}')
+        requests.post(url, data=token_json, headers={'content-type': 'application/json'})

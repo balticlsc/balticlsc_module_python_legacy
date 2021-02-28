@@ -1,9 +1,8 @@
 from ftplib import FTP, error_perm
-from typing import IO, Union
+from typing import IO
 
-from ..configs.credential.ftp import FTPCredential
-from ..scheme.api import rest_client
-from ..scheme.logger import logger
+from balticlsc.configs.credential.ftp import FTPCredential
+from balticlsc.scheme.logger import logger
 # Hacking the FTP library
 _old_makepasv = FTP.makepasv
 
@@ -47,15 +46,9 @@ def get_connection(credential: FTPCredential) -> FTP:
             connection.sendcmd('PASS ' + credential.password)
             return connection
         except BaseException as exception:
-            error_msg = 'connecting to FTP ' + str(retries) + ' retries, exception' + str(exception)
-            logger.error(error_msg)
-            rest_client.send_ack_token(
-                msg_uid=error_msg,
-                is_final=False,
-                is_failed=False,
-                note=error_msg
-            )
+            error_msg = 'connecting to FTP ' + str(retries) + ' retries, exception:' + str(exception)
+            logger.warning(error_msg)
 
-    raise RuntimeError('connecting to FTP exceeded max retries = ' + str(retries))
-
-
+    error_msg = 'connecting to FTP exceeded max retries = ' + str(retries)
+    logger.error(error_msg)
+    raise RuntimeError(error_msg)

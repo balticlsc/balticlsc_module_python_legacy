@@ -1,51 +1,60 @@
-from typing import List, Union
+from typing import List
 
-from .utils import JsonRepr
-
-UNKNOWN_MSG_UID = "unknown"
+from balticlsc.scheme.utils import JsonRepr
 
 
-class InputToken(JsonRepr):
-    def __init__(self, MsgUid: str, PinName: str, Values: str,
-                 AccessType: Union[dict, None] = None, TokenSeqStack: Union[List[dict], None] = None):
-        self.MsgUid = MsgUid
-        self.PinName = PinName
-        self.AccessType = AccessType
-        self.Values = Values
+class Token(JsonRepr):
+    pass
 
-        if TokenSeqStack is None:
-            self.SeqStack = None
+
+class InputToken(Token):
+    def __init__(self, msg_uid: str, pin_name: str, values: str,
+                 access_type: dict = None, token_seq_stack: List[dict] = None):
+        self._msg_uid = msg_uid
+        self._pin_name = pin_name
+        self._values = values
+        self._access_type = access_type
+
+        if token_seq_stack is None:
+            self._seq_stack = None
         else:
-            seq_stac = []
-            for seq_token in TokenSeqStack:
-                seq_stac.append(XSeqToken(**seq_token))
-            self.SeqStack = seq_stac
+            seq_stack = []
 
-    def __str__(self):
-        return "TOKEN: MsgUid=%s, PinName=%s, AccessType=%s, Values=%s, TokenSeqStack=%s" % \
-               (self.MsgUid, self.PinName, self.AccessType, self.Values, self.SeqStack)
+            for seq_token in token_seq_stack:
+                seq_stack.append(XSeqToken(**seq_token))
 
+            self._seq_stack = seq_stack
 
-class OutputToken(JsonRepr):
-    def __init__(self, PinName: str, SenderUid: str, Values: str, MsgUid: str, IsFinal):
-        self.PinName = PinName
-        self.SenderUid = SenderUid
-        self.Values = Values
-        self.MsgUid = MsgUid
-        self.IsFinal = IsFinal
+    def get_values(self) -> str:
+        return self._values
+
+    def get_pin_name(self) -> str:
+        return self._pin_name
+
+    def get_msg_uid(self) -> str:
+        return self._msg_uid
 
 
-class XSeqToken(JsonRepr):
-    def __init__(self, SeqUid: str, No: int, IsFinal: bool):
-        self.SeqUid = SeqUid       # string
-        self.No = No               # int
-        self.IsFinal = IsFinal     # bool
+class OutputToken(Token):
+    def __init__(self, pin_name: str, sender_uid: str, values: str, base_msg_uid: str, is_final: bool):
+        self._pin_name = pin_name
+        self._sender_uid = sender_uid
+        self._values = values
+        self._base_msg_uid = base_msg_uid
+        self._is_final = is_final
 
 
-class AckToken(JsonRepr):
-    def __init__(self, SenderUid: str, MsgUid: str, Note: str, IsFinal: bool = False, IsFailed: bool = False):
-        self.SenderUid = SenderUid
-        self.MsgUid = MsgUid
-        self.Note = Note
-        self.IsFinal = IsFinal
-        self.IsFailed = IsFailed
+class XSeqToken(Token):
+    def __init__(self, seq_uid: str, no: int, is_final: bool):
+        self._seq_uid = seq_uid
+        self._no = no
+        self._is_final = is_final
+
+
+class AckToken(Token):
+    def __init__(self, sender_uid: str, msg_uids: List[str], note: str, is_final: bool, is_failed: bool = False):
+        self._sender_uid = sender_uid
+        self._msg_uids = msg_uids
+        self._note = note
+        self._is_final = is_final
+        self._is_failed = is_failed

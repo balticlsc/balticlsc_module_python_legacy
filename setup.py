@@ -5,10 +5,10 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="balticlsc",
-    version="0.0.5",
+    version="1.0.1",
     author="Jan Bielecki",
     author_email="jan.bielecki.dokt@pw.edu.pl",
-    description="Baltic LSC python balticlsc scheme",
+    description="Baltic LSC module scheme",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/K4liber/balticlsc_module",

@@ -1,8 +1,10 @@
 import unittest
-from ..scheme.token import InputToken
+
+from balticlsc.scheme.token import InputToken
+from balticlsc.scheme.utils import camel_to_snake
 
 
-class TestLoadInputToken(unittest.TestCase):
+class TestInputToken(unittest.TestCase):
     def test_simple_correct_json(self):
         token_json: dict = {
             'MsgUid': '1',
@@ -10,23 +12,22 @@ class TestLoadInputToken(unittest.TestCase):
             'Values': '{\"ResourcePath\": \"/files/recogniser/in\"}'
         }
         try:
-            token = InputToken(**token_json)
-            print(token)
-        except TypeError as te:
-            self.assert_(False, te)
+            InputToken(**{camel_to_snake(key): value for key, value in token_json.items()})
+        except BaseException as exception:
+            self.assert_(False, exception)
 
     def test_incorrect_json(self):
         token_json: dict = {
-            'MsgUid': '1',
-            'PinName': 'Input',
+            'MsgUid': '2',
+            'PinName': 'Input1',
             'Values': '{\"ResourcePath\": \"/files/recogniser/in\"}',
             'SthElse': ''
         }
         try:
-            InputToken(**token_json)
+            InputToken(**{camel_to_snake(key): value for key, value in token_json.items()})
             self.assert_(False, 'test failed, should raise an error')
-        except TypeError as te:
-            print(te)
+        except BaseException as exception:
+            print(exception)
 
 
 if __name__ == '__main__':

@@ -5,10 +5,11 @@ from time import localtime
 
 
 class JsonRepr:
-    def to_json(self):
-        return json.dumps(self.__dict__, default=lambda o: o.__dict__, indent=3)
+    def to_json(self) -> str:
+        camel_dict = {snake_to_camel(key): value for key, value in self.__dict__.items()}
+        return json.dumps(camel_dict, default=lambda o: o.__dict__, indent=3)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.to_json()
 
 

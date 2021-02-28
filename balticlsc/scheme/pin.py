@@ -1,138 +1,136 @@
 import json
-import logging
+from collections import defaultdict
 from typing import List, Dict, Any
 
-from .job_rest_client import JobRestClient
-from .utils import JsonRepr, camel_to_snake
+from balticlsc.scheme.logger import logger
+from balticlsc.scheme.utils import JsonRepr, camel_to_snake
 
 
-class PinTypes:
+class PinType:
     INPUT = 'input'
     OUTPUT = 'output'
 
 
-class AccessTypes:
+class AccessType:
     FTP = 'ftp'
 
 
-class PinMetaData(JsonRepr):
+class PinAttribute:
+    NAME = 'pin_name'
+    TYPE = 'pin_type'
+    ACCESS_PATH = 'access_path'
+    ACCESS_TYPE = 'access_type'
+    ACCESS_CREDENTIAL = 'access_credential'
+    TOKEN_MULTIPLICITY = 'token_multiplicity'
+    DATA_MULTIPLICITY = 'data_multiplicity'
+    VALUES = 'values'
+
+
+class ValuesAttribute:
+    RESOURCE_PATH = 'resource_path'
+
+
+class Pin(JsonRepr):
+    __required_attributes = [
+        PinAttribute.NAME,
+        PinAttribute.TYPE,
+    ]
+    __optional_attributes = [
+        PinAttribute.ACCESS_PATH,
+        PinAttribute.ACCESS_TYPE,
+        PinAttribute.ACCESS_CREDENTIAL,
+        PinAttribute.TOKEN_MULTIPLICITY,
+        PinAttribute.DATA_MULTIPLICITY,
+        PinAttribute.VALUES,
+    ]
+
     def __init__(self, attributes: Dict[str, Any]):
-        for required_attribute in PinMetaData.get_required_attributes():
-            if required_attribute in attributes:
-                self.__setattr__(required_attribute, attributes[required_attribute])
+        for attribute_name in Pin.__required_attributes:
+            if attribute_name in attributes:
+                attribute_value = attributes[attribute_name]
+
+                if attribute_name == PinAttribute.TYPE and attribute_value not in {PinType.INPUT, PinType.OUTPUT}:
+                    raise ValueError(f'unknown pin type = "{attribute_value}"')
+
+                self.__setattr__('_' + attribute_name, attribute_value)
             else:
-                raise ValueError('required attribute "' + required_attribute + '" is missing in config')
+                raise ValueError('required attribute "' + attribute_name + '" is missing in config')
 
-        for default_attribute, default_value in PinMetaData.get_default_attributes().items():
-            if default_attribute in attributes:
-                self.__setattr__(default_attribute, attributes[default_attribute])
+        for attribute_name, attribute_value in attributes.items():
+            if attribute_name in Pin.__required_attributes:
+                continue
+            elif attribute_name in self.__optional_attributes:
+                self.__setattr__('_' + attribute_name, attribute_value)
             else:
-                self.__setattr__(default_attribute, default_value)
+                logger.warning(f'unknown attribute "{attribute_name}" in the config file, omitting')
 
-    def getattr(self, name: str):
-        attr_value: str = self.__getattribute__(name)
+    def getattr(self, name: str) -> Any:
+        try:
+            return self.__getattribute__('_' + name)
+        except AttributeError:
+            logger.info(f'pin {self.__repr__()} do not have attribute "{name}"')
+            return None
 
-        if attr_value is None or attr_value == '':
-            raise ValueError('attribute "' + name + '" is missing')
+    # set value of an optional attribute
+    def set_opt_attr(self, name: str, value: Any) -> Any:
+        if name in self.__optional_attributes:
+            return self.__setattr__('_' + name, value)
         else:
-            return attr_value
-
-    @classmethod
-    def get_required_attributes(cls):
-        return {
-            'pin_name',
-            'pin_type',
-        }
-
-    @classmethod
-    def get_default_attributes(cls):
-        return {
-            'access_path': None,
-            'access_type': '',
-            'access_credential': None,
-            'token_multiplicity': '',
-            'data_multiplicity': '',
-            'values': None,
-        }
+            error_msg = f'{name} is not an optional argument of a Pin'
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
 
-def load_pin_meta_data(pin_json: dict) -> PinMetaData:
+class Pins:
+    def __init__(self):
+        self._type_to_pins = defaultdict(set)
+
+    def add_pin(self, pin: Pin):
+        self._type_to_pins[pin.getattr(PinAttribute.TYPE)].add(pin)
+
+    def get_name_to_pin(self, pin_type: PinType) -> Dict[str, Pin]:
+        return {pin.getattr(PinAttribute.NAME): pin for pin in self._type_to_pins[pin_type]}
+
+
+def _load_pin(pin_json: dict) -> Pin:
     try:
-        pin_meta_data = PinMetaData({camel_to_snake(key): value for key, value in pin_json.items()})
-    except TypeError as type_error:
-        errors_msg: str = 'wrong config for pin json:' + str(pin_json) + ', error: ' + str(type_error)
-        raise ValueError(errors_msg) from type_error
-    # Check required attributes loading
-    for required_attribute in PinMetaData.get_required_attributes():
-        pin_meta_data.getattr(required_attribute)
+        pin_meta_data = Pin({camel_to_snake(key): value for key, value in pin_json.items()})
+    except BaseException as exception:
+        error_msg: str = 'wrong config for pin json:' + str(pin_json) + ', error: ' + str(exception)
+        raise ValueError(error_msg) from exception
 
     return pin_meta_data
 
 
-# Load and return input and output pins meta data from the given config file path
-def load_pins(config_file_path: str, rest_client: JobRestClient) -> (List[PinMetaData], List[PinMetaData]):
+def _load_pins(config_file_path: str) -> Pins:
     with open(config_file_path) as json_file:
         try:
-            config = json.load(json_file)
-            return load_pins_from_json(config)
-        except ValueError as value_error:
-            error_msg = 'error while loading config from ' + config_file_path + ': ' + str(value_error)
-            rest_client.send_ack_token(is_final=True, is_failed=True, note=error_msg)
-            logging.error(error_msg)
+            return _load_pins_from_json(json.load(json_file))
+        except BaseException as exception:
+            error_msg = 'error while loading config from ' + config_file_path + ': ' + str(exception)
+            raise ValueError(error_msg) from exception
 
 
-def load_pins_from_json(config: List[dict]) -> (List[PinMetaData], List[PinMetaData]):
-    input_pins: List[PinMetaData] = []
-    output_pins: List[PinMetaData] = []
+def _load_pins_from_json(config: List[dict]) -> Pins:
+    pins = Pins()
 
-    for pin_description in config:
-        try:
-            pin = load_pin_meta_data(pin_description)
+    for pin_json in config:
+        pins.add_pin(_load_pin(pin_json))
 
-            if pin.pin_type == PinTypes.INPUT:
-                input_pins.append(pin)
-                logging.info('loaded pin: ' + pin.to_json())
-            elif pin.pin_type == PinTypes.OUTPUT:
-                output_pins.append(pin)
-                logging.info('loaded pin: ' + pin.to_json())
-            else:
-                print('unknown type for pin:"' + pin.to_json())
-        except ValueError as value_error:
-            logging.error('pin loading error: ' + str(value_error))
-            raise value_error
-
-    return input_pins, output_pins
+    return pins
 
 
 class MissingPin(Exception):
-    """Exception raised for errors in the pins configuration.
+    """Exception raised when specific pin is missing.
 
     Attributes:
-        pins -- list of pins where we look for a specific pin
-        message -- explanation of the error
+        pins -- set of pins where we look for a specific pin
+        missing_pin_name -- the name of a missing pin
     """
 
-    def __init__(self, pins: List[PinMetaData], message="missing pin"):
-        self.pins = pins
-        self.message = message
-        super().__init__(self.message)
+    def __init__(self, pins: List[Pin], missing_pin_name: str):
+        self._message = f'missing pin "{missing_pin_name}" in {pins}'
+        super().__init__(self._message)
 
     def __str__(self):
-        return f'{self.pins} -> {self.message}'
-
-
-class MissingPinValue(Exception):
-    """Exception raised for errors in the pins configuration.
-
-    Attributes:
-        pin_values -- values of a pin
-        message -- explanation of the error
-    """
-
-    def __init__(self, pin_values: Dict[str, str], message="missing value"):
-        self.pin_values = pin_values
-        self.message = message
-        super().__init__(self.message)
-
-    def __str__(self):
-        return f'{self.pin_values} -> {self.message}'
+        return self._message
